@@ -1,0 +1,30 @@
+# Task 13: configure a clean node.   Run: ansible-playbook -i inventory.ini site.yml
+- name: Configure DVMP target node
+  hosts: appservers
+  become: true
+  vars:
+    app_user: dvmp
+    app_dir: /opt/dvmp
+    app_port: 8081
+  tasks:
+    - name: Install prerequisites
+      ansible.builtin.apt:
+        name: [docker.io, python3-docker, curl]
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker is running and enabled
+      ansible.builtin.service: { name: docker, state: started, enabled: true }
+
+    - name: Create application user
+      ansible.builtin.user: { name: "{{ app_user }}", groups: docker, append: true, shell: /bin/bash }
+
+    - name: Create application directory
+      ansible.builtin.file: { path: "{{ app_dir }}", state: directory, owner: "{{ app_user }}", mode: "0755" }
+
+    - name: Write environment file
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/dvmp.env"
+        content: "SPRING_PROFILES_ACTIVE=prod\nPORT={{ app_port }}\n"
+        owner: "{{ app_user }}"
+        mode: "0640"

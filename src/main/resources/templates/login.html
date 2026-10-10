@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Sign in')}"></head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main class="login">
+  <div class="panel">
+    <h1>Sign in</h1>
+    <p class="sub">Dataset Version Management Portal</p>
+    <div class="flash err" id="login-error" th:if="${param.error}">Invalid username or password.</div>
+    <div class="flash ok" id="logged-out" th:if="${param.logout}">You have been signed out.</div>
+    <form method="post" th:action="@{/login}">
+      <label for="username">Username</label>
+      <input id="username" name="username" autofocus>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password">
+      <p><button id="login-btn" type="submit" style="width:100%">Sign in</button></p>
+    </form>
+  </div>
+  <div class="panel demo">
+    <b>Demo accounts</b>
+    <table>
+      <tr><th>Username</th><th>Password</th><th>Role</th><th>Can do</th></tr>
+      <tr><td>user</td><td>user123</td><td>USER</td><td>Upload datasets &amp; versions, submit</td></tr>
+      <tr><td>user2</td><td>user123</td><td>USER</td><td>Same, separate owner</td></tr>
+      <tr><td>reviewer</td><td>reviewer123</td><td>REVIEWER</td><td>Approve / reject, download</td></tr>
+      <tr><td>admin</td><td>admin123</td><td>ADMIN</td><td>Everything incl. delete</td></tr>
+    </table>
+  </div>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

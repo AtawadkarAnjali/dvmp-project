@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Dataset')}"></head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main style="max-width:780px">
+  <h1 th:text="${showFile} ? 'Upload new dataset' : 'Edit dataset'">Dataset</h1>
+  <p class="sub">A good description, tags and license make your dataset easier to find and raise its <a th:href="@{/guide}">usability score</a>.</p>
+
+  <form class="panel" method="post" enctype="multipart/form-data"
+        th:action="@{${action}(_csrf=${_csrf.token})}" th:object="${dataset}">
+    <label for="name">Title *</label>
+    <input id="name" th:field="*{name}" placeholder="e.g. Customer Churn 2024">
+    <span class="error" id="name-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}"></span>
+
+    <label for="subtitle">Subtitle</label>
+    <input id="subtitle" th:field="*{subtitle}" placeholder="One line that explains the dataset">
+    <span class="error" th:if="${#fields.hasErrors('subtitle')}" th:errors="*{subtitle}"></span>
+
+    <label for="description">Description</label>
+    <textarea id="description" rows="7" th:field="*{description}"
+              placeholder="What does it contain? Where does it come from? What columns are there? How could it be used?"></textarea>
+    <span class="error" th:if="${#fields.hasErrors('description')}" th:errors="*{description}"></span>
+
+    <label for="tags">Tags</label>
+    <input id="tags" th:field="*{tags}" placeholder="e.g. telecom, churn, classification">
+    <div class="hint">Comma separated, up to 8 tags.</div>
+
+    <label for="license">License</label>
+    <select id="license" th:field="*{license}"><option th:each="l : ${licenses}" th:value="${l}" th:text="${l}"></option></select>
+
+    <div th:if="${showFile}">
+      <label for="file">Dataset file *</label>
+      <div class="dropzone"><input id="file" type="file" name="file"></div>
+      <div class="hint">Allowed: csv, tsv, json, xml, txt, xlsx, xls, parquet, zip, gz, png, jpg &middot; max 100 MB. CSV/TSV files get an automatic data preview.</div>
+      <span class="error" id="file-error" th:if="${fileError}" th:text="${fileError}"></span>
+    </div>
+
+    <div class="actions">
+      <button id="save" type="submit" th:text="${showFile} ? 'Upload dataset' : 'Save changes'">Save</button>
+      <a class="btn ghost" th:href="@{/}">Cancel</a>
+    </div>
+  </form>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Datasets')}"></head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main>
+  <h1>Datasets</h1>
+  <p class="sub" th:if="${role == 'USER'}">Explore datasets, upload your own and submit them for review. New here? Read the <a th:href="@{/guide}">Guide</a>.</p>
+  <p class="sub" th:if="${role == 'REVIEWER'}">Open a dataset that is <b>In review</b> to approve or reject it. <a th:href="@{/(status='IN_REVIEW')}">Show review queue</a></p>
+  <p class="sub" th:if="${role == 'ADMIN'}">Full access: upload, review and manage every dataset.</p>
+
+  <div class="flash err" id="flash" th:if="${error}" th:text="${error}"></div>
+
+  <section class="cards">
+    <a class="stat" th:href="@{/}"><span id="total-count" th:text="${total}">0</span><small>Total datasets</small></a>
+    <a class="stat s-draft" th:href="@{/(status='DRAFT')}"><span id="draft-count" th:text="${draft}">0</span><small>Draft</small></a>
+    <a class="stat s-review" th:href="@{/(status='IN_REVIEW')}"><span id="review-count" th:text="${review}">0</span><small>In review</small></a>
+    <a class="stat s-ok" th:href="@{/(status='APPROVED')}"><span id="approved-count" th:text="${approved}">0</span><small>Approved</small></a>
+  </section>
+
+  <form class="toolbar" method="get" th:action="@{/}">
+    <input id="q" name="q" th:value="${q}" placeholder="Search datasets by name, owner, tag or subtitle...">
+    <input type="hidden" name="status" th:value="${statusFilter}">
+    <input type="hidden" name="tag" th:value="${tagFilter}">
+    <button id="search-btn" type="submit">Search</button>
+    <a id="clear-filters" class="btn ghost" th:if="${q != null or statusFilter != null or tagFilter != null}" th:href="@{/}">Clear</a>
+    <a id="new-dataset" class="btn" th:if="${role == 'USER' or role == 'ADMIN'}" th:href="@{/datasets/new}">&#8679; Upload dataset</a>
+  </form>
+
+  <div class="tagbar" th:if="${!#lists.isEmpty(topTags)}">
+    <b>Popular tags</b>
+    <a class="tag" th:each="t : ${topTags}" th:href="@{/(tag=${t})}" th:text="'#' + ${t}">#tag</a>
+  </div>
+
+  <div id="dataset-table" class="grid">
+    <div class="dcard" th:each="d : ${datasets}">
+      <div class="top">
+        <h3><a th:href="@{/datasets/{id}(id=${d.id})}" th:text="${d.name}">Name</a></h3>
+        <span th:class="'badge ' + ${d.status}" th:text="${d.status}">DRAFT</span>
+      </div>
+      <p class="subtitle" th:text="${d.subtitle != null ? d.subtitle : 'No subtitle yet'}">Subtitle</p>
+      <div class="chips"><a class="tag" th:each="t : ${d.tagList}" th:href="@{/(tag=${t})}" th:text="'#' + ${t}">#tag</a></div>
+      <div class="foot">
+        <span th:text="${d.format}">CSV</span>
+        <span th:text="'v' + ${d.currentVersion}">v1</span>
+        <span th:text="${d.latestSize}">1 KB</span>
+        <span th:text="'&#11015; ' + ${d.totalDownloads}">0</span>
+        <span th:text="'by ' + ${d.owner}">by user</span>
+        <span th:text="'Usability ' + ${d.usabilityScore}">8.0</span>
+      </div>
+    </div>
+  </div>
+  <div class="panel empty" id="empty" th:if="${#lists.isEmpty(datasets)}">No datasets found.</div>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>
