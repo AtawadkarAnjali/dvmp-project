@@ -74,4 +74,4 @@ ansible-playbook -i inventory.ini deploy.yml --ask-become-pass \
 
 ## Project status
 - Planning, repository setup and MVP are complete
-- CI/CD pipeline, Docker and Ansible are in progress
+- Jenkins, Docker and Ansible are scheduled for the next sprint
