@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title th:text="${title} + ' | Dataset Version Portal'">Portal</title>
+  <link rel="stylesheet" th:href="@{/style.css}">
+</head>
+<body>
+<header class="top" th:fragment="header">
+  <div class="left">
+    <a class="brand" th:href="@{/}">&#128230; Dataset Version Portal</a>
+    <nav><a id="nav-datasets" th:href="@{/}">Datasets</a><a id="nav-guide" th:href="@{/guide}">&#8505; Guide</a></nav>
+  </div>
+  <div class="who" th:if="${username != null}">
+    <span>Signed in as <b id="whoami" th:text="${username}">user</b></span>
+    <span id="role-badge" class="rolebadge" th:text="${role}">USER</span>
+    <form method="post" th:action="@{/logout}"><button id="logout" type="submit">Logout</button></form>
+  </div>
+</header>
+<footer th:fragment="footer">Environment: <b id="env" th:text="${env}">local</b> &middot; DevOps Mini Project</footer>
+</body>
+</html>

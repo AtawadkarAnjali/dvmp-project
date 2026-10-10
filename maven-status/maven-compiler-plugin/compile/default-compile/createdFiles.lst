@@ -1,0 +1,13 @@
+com\devops\dvmp\FileStorageService.class
+com\devops\dvmp\Status.class
+com\devops\dvmp\DatasetRepository.class
+com\devops\dvmp\DatasetVersionRepository.class
+com\devops\dvmp\DvmpApplication.class
+com\devops\dvmp\FilePreview.class
+com\devops\dvmp\DatasetVersion.class
+com\devops\dvmp\Dataset.class
+com\devops\dvmp\SecurityConfig.class
+com\devops\dvmp\DatasetController.class
+com\devops\dvmp\StoredFile.class
+com\devops\dvmp\DatasetForm.class
+com\devops\dvmp\GlobalExceptionHandler.class
