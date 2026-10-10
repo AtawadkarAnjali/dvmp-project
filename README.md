@@ -71,3 +71,7 @@ ansible-playbook -i inventory.ini deploy.yml --ask-become-pass \
 
 ## Layout
 `src/` app + tests - `Dockerfile` - `Jenkinsfile` - `ansible/` - `docs/PLANNING.md` (Tasks 1-3 drafts)
+
+## Project status
+- Planning, repository setup and MVP are complete
+- CI/CD pipeline, Docker and Ansible are in progress
