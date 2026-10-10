@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head(${d.name})}"></head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main>
+  <div class="flash err" id="flash" th:if="${error}" th:text="${error}"></div>
+  <div class="flash ok" id="success" th:if="${success}" th:text="${success}"></div>
+
+  <!-- ===== hero ===== -->
+  <div class="hero">
+    <h1 id="title" th:text="${d.name}">Name</h1>
+    <p class="subtitle" id="subtitle" th:if="${d.subtitle != null}" th:text="${d.subtitle}">Subtitle</p>
+    <div class="chips" style="margin-bottom:12px">
+      <span id="status" th:class="'badge ' + ${d.status}" th:text="${d.status}">DRAFT</span>
+      <a class="tag" th:each="t : ${d.tagList}" th:href="@{/(tag=${t})}" th:text="'#' + ${t}">#tag</a>
+    </div>
+    <div class="note" id="review-note" th:if="${d.reviewNote != null}">
+      <b>Reviewer comment</b> (<span th:text="${d.reviewedBy}"></span>): <span th:text="${d.reviewNote}"></span>
+    </div>
+
+    <div class="actions">
+      <a id="download-latest" class="btn" th:if="${d.latest != null and d.latest.storedName != null}"
+         th:href="@{/versions/{id}/download(id=${d.latest.id})}" th:text="'&#11015; Download latest (' + ${d.latest.sizeLabel} + ')'">Download</a>
+      <a id="edit" class="btn ghost" th:if="${canEdit}" th:href="@{/datasets/{id}/edit(id=${d.id})}">Edit details</a>
+      <form method="post" th:if="${canSubmit}" th:action="@{/datasets/{id}/submit(id=${d.id})}">
+        <button id="submit-review" class="warn">Submit for review</button>
+      </form>
+      <form method="post" th:if="${canReview}" th:action="@{/datasets/{id}/approve(id=${d.id})}">
+        <input name="comment" placeholder="Optional comment">
+        <button id="approve" class="ok">Approve</button>
+      </form>
+      <form method="post" th:if="${canReview}" th:action="@{/datasets/{id}/reject(id=${d.id})}">
+        <input id="comment" name="comment" placeholder="Reason for rejection">
+        <button id="reject" class="danger">Reject</button>
+      </form>
+      <form method="post" th:if="${isAdmin}" th:action="@{/datasets/{id}/delete(id=${d.id})}"
+            onsubmit="return confirm('Delete this dataset and all its files?')">
+        <button id="delete" class="danger">Delete</button>
+      </form>
+    </div>
+    <p class="hint" th:if="${d.status.name() == 'IN_REVIEW' and !canReview}">Locked while waiting for a reviewer's decision.</p>
+  </div>
+
+  <div class="cols">
+    <div>
+      <!-- ===== about ===== -->
+      <div class="section">
+        <h2>About this dataset</h2>
+        <div class="desc" id="description" th:if="${d.description != null and !d.description.isBlank()}" th:text="${d.description}">Description</div>
+        <p class="hint" th:if="${d.description == null or d.description.isBlank()}">No description yet. Add one to improve the usability score.</p>
+      </div>
+
+      <!-- ===== data preview ===== -->
+      <div class="section" id="data" th:if="${selected != null}">
+        <h2>Data <small style="font-weight:500;color:var(--muted)" th:text="'&middot; v' + ${selected.versionNo} + ' &middot; ' + ${selected.fileName}"></small></h2>
+        <div th:if="${preview != null}">
+          <p class="hint" id="preview-summary" th:text="${#lists.size(preview.columns)} + ' columns &middot; ' + ${preview.totalRows} + ' rows &middot; showing first ' + ${#lists.size(preview.rows)}">3 columns</p>
+          <div class="scroll">
+            <table class="preview" id="preview-table">
+              <thead><tr><th th:each="c, i : ${preview.columns}"><span th:text="${c}">col</span><span class="ctype" th:text="${preview.types[i.index]}">type</span></th></tr></thead>
+              <tbody><tr th:each="r : ${preview.rows}"><td th:each="cell : ${r}" th:text="${cell}">v</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <p class="hint" id="no-preview" th:if="${preview == null}">Preview is only available for CSV and TSV files. Download the file to inspect it.</p>
+      </div>
+
+      <!-- ===== versions ===== -->
+      <div class="section" id="versions">
+        <h2>Version history</h2>
+        <div class="scroll">
+        <table id="version-table">
+          <thead><tr><th>Version</th><th>File</th><th>Size</th><th>SHA-256</th><th>Notes</th><th>By</th><th>Uploaded</th><th>&#11015;</th></tr></thead>
+          <tbody>
+            <tr class="vrow" th:each="v : ${d.versions}" th:classappend="${selected != null and v.id == selected.id} ? 'sel'">
+              <td><b><a th:href="@{/datasets/{id}(id=${d.id},v=${v.versionNo})}" th:text="'v' + ${v.versionNo}">v1</a></b></td>
+              <td><a class="download" th:if="${v.storedName != null}" th:href="@{/versions/{id}/download(id=${v.id})}"
+                     th:text="${v.fileName}">file.csv</a></td>
+              <td th:text="${v.sizeLabel}"></td>
+              <td><code th:text="${v.shortChecksum}"></code></td>
+              <td th:text="${v.notes}"></td>
+              <td th:text="${v.createdBy}"></td>
+              <td th:text="${#temporals.format(v.createdAt, 'yyyy-MM-dd HH:mm')}"></td>
+              <td th:text="${v.downloads}">0</td>
+            </tr>
+          </tbody>
+        </table>
+        </div>
+        <p class="hint">Click a version number to preview its data.</p>
+      </div>
+
+      <form class="section" id="version-form" method="post" enctype="multipart/form-data"
+            th:if="${canAddVersion}" th:action="@{/datasets/{id}/versions(id=${d.id},_csrf=${_csrf.token})}">
+        <h2>Upload a new version</h2>
+        <p class="hint" th:if="${d.status.name() == 'APPROVED'}">Uploading a new version moves the dataset back to Draft for re-approval.</p>
+        <label for="notes">What changed?</label>
+        <input id="notes" name="notes" placeholder="e.g. Removed duplicate rows">
+        <label for="version-file">Dataset file *</label>
+        <div class="dropzone"><input id="version-file" type="file" name="file"></div>
+        <div class="actions"><button id="add-version" type="submit">Upload version</button></div>
+      </form>
+    </div>
+
+    <!-- ===== sidebar ===== -->
+    <aside class="side">
+      <h3>Usability</h3>
+      <div class="score">
+        <span class="num" id="usability" th:text="${d.usabilityScore}">8.0</span>
+        <div class="bar"><i th:style="'width:' + (${d.usabilityScore} * 10) + '%'"></i></div>
+      </div>
+      <dl>
+        <dt>Current version</dt><dd id="current-version" th:text="'v' + ${d.currentVersion}">v1</dd>
+        <dt>Owner</dt><dd th:text="${d.owner}"></dd>
+        <dt>License</dt><dd th:text="${d.license != null ? d.license : 'Unknown'}"></dd>
+        <dt>File format</dt><dd th:text="${d.format}"></dd>
+        <dt>Latest size</dt><dd th:text="${d.latestSize}"></dd>
+        <dt>Downloads</dt><dd th:text="${d.totalDownloads}">0</dd>
+        <dt>Created</dt><dd th:text="${#temporals.format(d.createdAt, 'yyyy-MM-dd')}"></dd>
+        <dt>Last updated</dt><dd th:text="${#temporals.format(d.lastUpdated, 'yyyy-MM-dd HH:mm')}"></dd>
+      </dl>
+      <p class="hint" style="margin-top:14px"><a th:href="@{/guide}">How is usability calculated?</a></p>
+    </aside>
+  </div>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

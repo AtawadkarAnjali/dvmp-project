@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments :: head('Guide')}"></head>
+<body>
+<header th:replace="~{fragments :: header}"></header>
+<main>
+  <h1 id="guide-title">Portal guide &amp; rules</h1>
+  <p class="sub">The Dataset Version Portal lets teams publish datasets, keep every version, and get them reviewed before use.
+    <span th:if="${role != null}">You are signed in as <b th:text="${role}"></b>.</span></p>
+
+  <h2>Roles &amp; permissions</h2>
+  <div class="guide-grid">
+    <div class="rolecard r-user" id="role-user" th:classappend="${role == 'USER'} ? 'me'">
+      <h3>USER <span class="tag">Data contributor</span></h3>
+      <p class="tagline">Creates and maintains datasets.</p>
+      <h4>Can</h4>
+      <ul>
+        <li class="yes">Upload a dataset with a data file (file is required)</li>
+        <li class="yes">Add title, subtitle, description, tags and license</li>
+        <li class="yes">Upload new versions of <b>their own</b> datasets</li>
+        <li class="yes">Edit and submit <b>their own</b> drafts for review</li>
+        <li class="yes">Browse, search, preview and download any dataset</li>
+      </ul>
+      <h4>Cannot</h4>
+      <ul>
+        <li class="no">Approve or reject datasets</li>
+        <li class="no">Edit other people's datasets</li>
+        <li class="no">Delete datasets</li>
+      </ul>
+    </div>
+
+    <div class="rolecard r-reviewer" id="role-reviewer" th:classappend="${role == 'REVIEWER'} ? 'me'">
+      <h3>REVIEWER <span class="tag">Quality gatekeeper</span></h3>
+      <p class="tagline">Decides whether a dataset is ready for use.</p>
+      <h4>Can</h4>
+      <ul>
+        <li class="yes">Browse, preview and download every dataset</li>
+        <li class="yes">Approve datasets that are <b>In review</b></li>
+        <li class="yes">Reject with a comment - the dataset returns to Draft</li>
+        <li class="yes">Use the "In review" filter as a review queue</li>
+      </ul>
+      <h4>Cannot</h4>
+      <ul>
+        <li class="no">Upload datasets or versions</li>
+        <li class="no">Edit dataset details</li>
+        <li class="no">Delete datasets</li>
+      </ul>
+    </div>
+
+    <div class="rolecard r-admin" id="role-admin" th:classappend="${role == 'ADMIN'} ? 'me'">
+      <h3>ADMIN <span class="tag">Administrator</span></h3>
+      <p class="tagline">Manages the whole portal.</p>
+      <h4>Can</h4>
+      <ul>
+        <li class="yes">Everything a USER can do, on <b>any</b> dataset</li>
+        <li class="yes">Approve or reject other people's datasets</li>
+        <li class="yes">Delete a dataset and all its files</li>
+      </ul>
+      <h4>Cannot</h4>
+      <ul>
+        <li class="no">Approve their own uploads (four-eyes rule)</li>
+        <li class="no">Upload a version while a dataset is In review (locked)</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>Permission matrix</h2>
+  <table class="matrix" id="matrix">
+    <thead><tr><th>Action</th><th>USER</th><th>REVIEWER</th><th>ADMIN</th></tr></thead>
+    <tbody>
+      <tr><td>Browse, search, preview, download</td><td class="y">&#10004;</td><td class="y">&#10004;</td><td class="y">&#10004;</td></tr>
+      <tr><td>Upload a new dataset</td><td class="y">&#10004;</td><td class="n">&#10008;</td><td class="y">&#10004;</td></tr>
+      <tr><td>Edit details / upload new version</td><td class="o">own only</td><td class="n">&#10008;</td><td class="y">&#10004; any</td></tr>
+      <tr><td>Submit for review</td><td class="o">own only</td><td class="n">&#10008;</td><td class="y">&#10004; any</td></tr>
+      <tr><td>Approve / reject</td><td class="n">&#10008;</td><td class="o">not own</td><td class="o">not own</td></tr>
+      <tr><td>Delete dataset</td><td class="n">&#10008;</td><td class="n">&#10008;</td><td class="y">&#10004;</td></tr>
+    </tbody>
+  </table>
+
+  <h2>Dataset lifecycle</h2>
+  <div class="flow">
+    <div class="step"><span class="badge DRAFT">DRAFT</span><p>The owner uploads files, edits details and adds versions. Nobody else needs to act yet.</p></div>
+    <div class="arrow">&#10132;</div>
+    <div class="step"><span class="badge IN_REVIEW">IN_REVIEW</span><p>The owner submitted it. The dataset is <b>locked</b> and a reviewer must decide.</p></div>
+    <div class="arrow">&#10132;</div>
+    <div class="step"><span class="badge APPROVED">APPROVED</span><p>A reviewer approved it. A rejection sends it back to Draft with the reviewer's comment.</p></div>
+  </div>
+
+  <h2>Rules</h2>
+  <div class="section">
+    <ol class="rules">
+      <li>A dataset cannot be reviewed by the person who uploaded it.</li>
+      <li>Uploading a new version of an <b>approved</b> dataset moves it back to <b>Draft</b> so the change is re-approved.</li>
+      <li>Every version keeps its own file, size, SHA-256 checksum, notes, author and download count. Old versions are never overwritten.</li>
+      <li>Allowed files: csv, tsv, json, xml, txt, xlsx, xls, parquet, zip, gz, png, jpg. Maximum size is 100 MB.</li>
+      <li>CSV and TSV files get an automatic preview with column types and row count.</li>
+      <li>Only admins can delete datasets; deleting removes all stored files.</li>
+    </ol>
+  </div>
+
+  <h2>Writing a good dataset page</h2>
+  <div class="section">
+    <p>Like on Kaggle, a well-described dataset is easier to trust and reuse. The <b>usability score</b> (out of 10) rewards a complete page:</p>
+    <table>
+      <thead><tr><th>Item</th><th>Points</th><th>Tip</th></tr></thead>
+      <tbody>
+        <tr><td>Description</td><td>up to 3</td><td>80+ characters: what it contains, source, columns, how to use it, what the target is.</td></tr>
+        <tr><td>Subtitle</td><td>1</td><td>One clear line (10+ characters).</td></tr>
+        <tr><td>Tags</td><td>2</td><td>At least one tag so people can find it.</td></tr>
+        <tr><td>License</td><td>2</td><td>Pick a real license (anything except "Unknown").</td></tr>
+        <tr><td>Data file</td><td>1</td><td>A file is attached to the latest version.</td></tr>
+        <tr><td>Approved</td><td>1</td><td>A reviewer has approved it.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Demo accounts</h2>
+  <table>
+    <thead><tr><th>Username</th><th>Password</th><th>Role</th></tr></thead>
+    <tbody>
+      <tr><td>user / user2</td><td>user123</td><td>USER</td></tr>
+      <tr><td>reviewer</td><td>reviewer123</td><td>REVIEWER</td></tr>
+      <tr><td>admin</td><td>admin123</td><td>ADMIN</td></tr>
+    </tbody>
+  </table>
+</main>
+<footer th:replace="~{fragments :: footer}"></footer>
+</body>
+</html>

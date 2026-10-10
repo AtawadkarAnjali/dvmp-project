@@ -1,0 +1,49 @@
+# Task 14: deploy + health check + automatic rollback.
+# Run: ansible-playbook -i inventory.ini deploy.yml \
+#        -e dvmp_image=youruser/dvmp:5 -e dvmp_previous_image=youruser/dvmp:4
+# Requires: ansible-galaxy collection install community.docker
+- name: Deploy DVMP container with rollback
+  hosts: appservers
+  become: true
+  vars:
+    app_port: 8081
+    dvmp_previous_image: ""
+  tasks:
+    - name: Deploy new release
+      block:
+        - name: Run new container
+          community.docker.docker_container:
+            name: dvmp
+            image: "{{ dvmp_image }}"
+            pull: true
+            recreate: true
+            state: started
+            restart_policy: unless-stopped
+            published_ports: ["{{ app_port }}:8080"]
+            env: { SPRING_PROFILES_ACTIVE: prod, SERVER_PORT: "8080" }
+            volumes: ["dvmp-data:/app/data", "dvmp-uploads:/app/uploads"]
+
+        - name: Health check
+          ansible.builtin.uri:
+            url: "http://localhost:{{ app_port }}/actuator/health"
+            return_content: true
+          register: health
+          until: health.status == 200 and health.json.status == "UP"
+          retries: 15
+          delay: 4
+
+        - name: Report success
+          ansible.builtin.debug: { msg: "Deployed {{ dvmp_image }} - health UP" }
+
+      rescue:
+        - name: Roll back to previous stable image
+          community.docker.docker_container:
+            name: dvmp
+            image: "{{ dvmp_previous_image }}"
+            recreate: true
+            state: started
+            published_ports: ["{{ app_port }}:8080"]
+          when: dvmp_previous_image | length > 0
+
+        - name: Fail the play after rollback
+          ansible.builtin.fail: { msg: "Deployment failed; rolled back to {{ dvmp_previous_image }}" }

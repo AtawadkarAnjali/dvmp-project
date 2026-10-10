@@ -1,0 +1,6 @@
+target/screenshots
+!target/dvmp.jar
+.git
+*.md
+ansible
+docs
