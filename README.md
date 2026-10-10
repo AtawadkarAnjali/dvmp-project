@@ -74,4 +74,4 @@ ansible-playbook -i inventory.ini deploy.yml --ask-become-pass \
 
 ## Project status
 - Planning, repository setup and MVP are complete
-- CI/CD pipeline, Docker and Ansible are in progress
+- CI/CD pipeline is in progress, Docker and Ansible come next
