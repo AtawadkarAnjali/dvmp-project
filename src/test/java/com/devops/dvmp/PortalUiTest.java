@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.TestWatcher;
 import org.openqa.selenium.*;
 import org.openqa.selenium.chrome.ChromeDriver;
 import org.openqa.selenium.chrome.ChromeOptions;
+import org.openqa.selenium.support.ui.ExpectedConditions;
+import org.openqa.selenium.support.ui.WebDriverWait;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 
@@ -17,16 +19,21 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-/** Selenium UI tests (headless Chrome). Skip with: mvn test -DskipUi=true */
+/**
+ * Selenium UI tests (headless Chrome). Skip with: mvn test -DskipUi=true
+ * Every step waits explicitly for the next page/element, so the tests are stable on slow machines (Jenkins).
+ */
 @DisabledIfSystemProperty(named = "skipUi", matches = "true")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 class PortalUiTest {
 
     @LocalServerPort int port;
     static WebDriver driver;
+    static WebDriverWait wait;
 
     @RegisterExtension
     TestWatcher screenshotOnFailure = new TestWatcher() {
@@ -47,6 +54,7 @@ class PortalUiTest {
         ChromeOptions o = new ChromeOptions();
         o.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--window-size=1280,1000");
         driver = new ChromeDriver(o);
+        wait = new WebDriverWait(driver, Duration.ofSeconds(20));
     }
 
     @AfterAll
@@ -55,17 +63,43 @@ class PortalUiTest {
     @BeforeEach
     void reset() { driver.manage().deleteAllCookies(); }
 
-    // ---------- helpers ----------
+    // ---------- helpers (all wait for the element before using it) ----------
     private String url(String path) { return "http://localhost:" + port + path; }
 
-    private void login(String user, String pass) {
-        driver.get(url("/login"));
-        driver.findElement(By.id("username")).sendKeys(user);
-        driver.findElement(By.id("password")).sendKeys(pass);
-        driver.findElement(By.id("login-btn")).click();
+    private WebElement byId(String id) {
+        return wait.until(ExpectedConditions.visibilityOfElementLocated(By.id(id)));
     }
 
-    private void logout() { driver.findElement(By.id("logout")).click(); }
+    private void type(String id, String text) { byId(id).sendKeys(text); }
+
+    private void attach(String id, Path file) {
+        wait.until(ExpectedConditions.presenceOfElementLocated(By.id(id)))
+            .sendKeys(file.toAbsolutePath().toString());
+    }
+
+    private void click(String id) {
+        wait.until(ExpectedConditions.elementToBeClickable(By.id(id))).click();
+    }
+
+    private void waitText(String id, String expected) {
+        wait.until(ExpectedConditions.textToBe(By.id(id), expected));
+    }
+
+    /** Signs in and waits until either the dashboard or the error message is shown. */
+    private void login(String user, String pass) {
+        driver.get(url("/login"));
+        type("username", user);
+        type("password", pass);
+        click("login-btn");
+        wait.until(ExpectedConditions.or(
+                ExpectedConditions.presenceOfElementLocated(By.id("whoami")),
+                ExpectedConditions.presenceOfElementLocated(By.id("login-error"))));
+    }
+
+    private void logout() {
+        click("logout");
+        byId("login-btn");          // login page is back
+    }
 
     private Path sampleCsv() throws IOException {
         Path p = Files.createTempFile("sample-", ".csv");
@@ -73,16 +107,17 @@ class PortalUiTest {
         return p;
     }
 
-    /** Logged in as USER: uploads a dataset with a file; returns its unique name. */
+    /** Logged in as USER: uploads a dataset with a file, waits for its page, returns the unique name. */
     private String uploadDataset(String prefix) throws IOException {
         String name = prefix + "-" + System.currentTimeMillis();
         driver.get(url("/datasets/new"));
-        driver.findElement(By.id("name")).sendKeys(name);
-        driver.findElement(By.id("subtitle")).sendKeys("Uploaded by an automated test");
-        driver.findElement(By.id("description")).sendKeys("created by selenium to verify the upload journey end to end");
-        driver.findElement(By.id("tags")).sendKeys("Selenium, Test");
-        driver.findElement(By.id("file")).sendKeys(sampleCsv().toAbsolutePath().toString());
-        driver.findElement(By.id("save")).click();
+        type("name", name);
+        type("subtitle", "Uploaded by an automated test");
+        type("description", "created by selenium to verify the upload journey end to end");
+        type("tags", "Selenium, Test");
+        attach("file", sampleCsv());
+        click("save");
+        waitText("title", name);    // dataset page is shown
         return name;
     }
 
@@ -90,31 +125,31 @@ class PortalUiTest {
     @Test
     void journey1_wrongPasswordIsRejected() {
         login("user", "wrong");
-        assertTrue(driver.findElement(By.id("login-error")).isDisplayed());
+        assertTrue(byId("login-error").isDisplayed());
     }
 
     @Test
     void journey2_userLoginShowsDashboard() {
         login("user", "user123");
-        assertEquals("user", driver.findElement(By.id("whoami")).getText());
-        assertEquals("USER", driver.findElement(By.id("role-badge")).getText());
-        assertTrue(Integer.parseInt(driver.findElement(By.id("total-count")).getText()) >= 2);
+        assertEquals("user", byId("whoami").getText());
+        assertEquals("USER", byId("role-badge").getText());
+        assertTrue(Integer.parseInt(byId("total-count").getText()) >= 2);
         assertFalse(driver.findElements(By.id("new-dataset")).isEmpty());
-        assertEquals("TEST", driver.findElement(By.id("env")).getText());
+        assertEquals("TEST", byId("env").getText());
     }
 
     @Test
     void journey3_userUploadsDatasetWithFile() throws IOException {
         login("user", "user123");
         String name = uploadDataset("upload");
-        assertEquals(name, driver.findElement(By.id("title")).getText());
-        assertEquals("DRAFT", driver.findElement(By.id("status")).getText());
-        assertEquals("v1", driver.findElement(By.id("current-version")).getText());
-        assertFalse(driver.findElements(By.cssSelector("a.download")).isEmpty());
-        assertTrue(driver.findElement(By.cssSelector("a.download")).getText().contains(".csv"));
-        assertEquals("Uploaded by an automated test", driver.findElement(By.id("subtitle")).getText());
-        assertTrue(driver.findElement(By.id("preview-summary")).getText().contains("2 columns"));
-        assertTrue(driver.findElement(By.id("preview-table")).getText().contains("integer"));
+        assertEquals(name, byId("title").getText());
+        assertEquals("DRAFT", byId("status").getText());
+        assertEquals("v1", byId("current-version").getText());
+        assertEquals("Uploaded by an automated test", byId("subtitle").getText());
+        assertTrue(byId("preview-summary").getText().contains("2 columns"));
+        assertTrue(byId("preview-table").getText().contains("integer"));
+        WebElement download = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector("a.download")));
+        assertTrue(download.getText().contains(".csv"));
         assertEquals(2, driver.findElements(By.cssSelector(".hero a.tag")).size());
     }
 
@@ -123,18 +158,20 @@ class PortalUiTest {
         login("user", "user123");
         String name = uploadDataset("search");
         driver.get(url("/"));
-        driver.findElement(By.id("q")).sendKeys(name);
-        driver.findElement(By.id("search-btn")).click();
-        assertTrue(driver.findElement(By.id("dataset-table")).getText().contains(name));
+        type("q", name);
+        click("search-btn");
+        wait.until(ExpectedConditions.urlContains("q="));
+        wait.until(ExpectedConditions.textToBePresentInElementLocated(By.id("dataset-table"), name));
+        assertTrue(byId("dataset-table").getText().contains(name));
     }
 
     @Test
     void journey5_validationErrorsForEmptyForm() {
         login("user", "user123");
         driver.get(url("/datasets/new"));
-        driver.findElement(By.id("save")).click();
-        assertTrue(driver.findElement(By.id("name-error")).getText().contains("Name is required"));
-        assertTrue(driver.findElement(By.id("file-error")).getText().contains("attach"));
+        click("save");
+        assertTrue(byId("name-error").getText().contains("Name is required"));
+        assertTrue(byId("file-error").getText().contains("attach"));
     }
 
     @Test
@@ -143,33 +180,35 @@ class PortalUiTest {
         uploadDataset("flow");
         String datasetUrl = driver.getCurrentUrl();
 
-        // new version
-        driver.findElement(By.id("notes")).sendKeys("cleaned nulls");
-        driver.findElement(By.id("version-file")).sendKeys(sampleCsv().toAbsolutePath().toString());
-        driver.findElement(By.id("add-version")).click();
-        assertEquals("v2", driver.findElement(By.id("current-version")).getText());
+        // upload a second version
+        type("notes", "cleaned nulls");
+        attach("version-file", sampleCsv());
+        click("add-version");
+        waitText("current-version", "v2");
 
-        // submit for review, then the owner cannot approve
-        driver.findElement(By.id("submit-review")).click();
-        assertEquals("IN_REVIEW", driver.findElement(By.id("status")).getText());
+        // submit for review; the owner cannot approve
+        click("submit-review");
+        waitText("status", "IN_REVIEW");
         assertTrue(driver.findElements(By.id("approve")).isEmpty());
         logout();
 
-        // reviewer: cannot upload, can approve
+        // reviewer: no upload button, can approve
         login("reviewer", "reviewer123");
         assertTrue(driver.findElements(By.id("new-dataset")).isEmpty());
         driver.get(datasetUrl);
-        driver.findElement(By.id("approve")).click();
-        assertEquals("APPROVED", driver.findElement(By.id("status")).getText());
+        click("approve");
+        waitText("status", "APPROVED");
         logout();
 
         // admin sees delete, user does not
         login("admin", "admin123");
         driver.get(datasetUrl);
+        byId("title");
         assertFalse(driver.findElements(By.id("delete")).isEmpty());
         logout();
         login("user", "user123");
         driver.get(datasetUrl);
+        byId("title");
         assertTrue(driver.findElements(By.id("delete")).isEmpty());
     }
 
@@ -177,14 +216,15 @@ class PortalUiTest {
     void journey7_reviewerBlockedFromUploadPage() {
         login("reviewer", "reviewer123");
         driver.get(url("/datasets/new"));
+        byId("denied-title");
         assertTrue(driver.getPageSource().contains("Access denied"));
     }
 
     @Test
     void journey8_guidePageShowsRoleRules() {
         driver.get(url("/guide"));
-        assertTrue(driver.findElement(By.id("guide-title")).getText().contains("Portal guide"));
-        assertTrue(driver.findElement(By.id("role-reviewer")).getText().contains("Approve"));
-        assertTrue(driver.findElement(By.id("matrix")).getText().contains("Delete dataset"));
+        assertTrue(byId("guide-title").getText().contains("Portal guide"));
+        assertTrue(byId("role-reviewer").getText().contains("Approve"));
+        assertTrue(byId("matrix").getText().contains("Delete dataset"));
     }
 }
