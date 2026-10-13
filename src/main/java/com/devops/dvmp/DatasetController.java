@@ -240,7 +240,7 @@ public class DatasetController {
         if (d.getStatus() != Status.IN_REVIEW) return back(id, ra, "error", "Dataset is not in review");
         if (d.getOwner().equals(auth.getName()))
             return back(id, ra, "error", "You cannot review your own dataset");
-        d.setStatus(approve ? Status.APPROVED : Status.DRAFT);
+           d.setStatus(Status.DRAFT);
         d.setReviewedBy(auth.getName());
         d.setReviewNote(comment.isBlank() ? null : comment.trim());
         repo.save(d);
