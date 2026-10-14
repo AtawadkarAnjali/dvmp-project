@@ -1,4 +1,6 @@
-# Task 13: configure a clean node.   Run: ansible-playbook -i inventory.ini site.yml
+# Task 13 - Configuration management with Ansible
+# Prepares a node so it can run the DVMP container: packages, Docker, service user, folders, environment file.
+# Run:  ansible-playbook site.yml --ask-become-pass
 - name: Configure DVMP target node
   hosts: appservers
   become: true
@@ -6,25 +8,73 @@
     app_user: dvmp
     app_dir: /opt/dvmp
     app_port: 8081
+    app_env: prod
+
   tasks:
-    - name: Install prerequisites
+    - name: Check whether Docker is already available (for example via Docker Desktop)
+      ansible.builtin.command: which docker
+      register: docker_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install base packages
       ansible.builtin.apt:
-        name: [docker.io, python3-docker, curl]
+        name:
+          - curl
+          - ca-certificates
+          - python3-docker
         state: present
         update_cache: true
+        cache_valid_time: 3600
 
-    - name: Ensure Docker is running and enabled
-      ansible.builtin.service: { name: docker, state: started, enabled: true }
+    - name: Install Docker engine (only when Docker is not already provided)
+      ansible.builtin.apt:
+        name: docker.io
+        state: present
+      when: docker_check.rc != 0
 
-    - name: Create application user
-      ansible.builtin.user: { name: "{{ app_user }}", groups: docker, append: true, shell: /bin/bash }
+    - name: Ensure the Docker service is running (systemd hosts only)
+      ansible.builtin.service:
+        name: docker
+        state: started
+        enabled: true
+      when: docker_check.rc != 0 and ansible_service_mgr == 'systemd'
 
-    - name: Create application directory
-      ansible.builtin.file: { path: "{{ app_dir }}", state: directory, owner: "{{ app_user }}", mode: "0755" }
+    - name: Ensure the docker group exists
+      ansible.builtin.group:
+        name: docker
+        state: present
 
-    - name: Write environment file
+    - name: Create the application service user
+      ansible.builtin.user:
+        name: "{{ app_user }}"
+        groups: docker
+        append: true
+        shell: /bin/bash
+        system: true
+        create_home: true
+
+    - name: Create the application directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ app_user }}"
+        mode: "0755"
+      loop:
+        - "{{ app_dir }}"
+        - "{{ app_dir }}/data"
+        - "{{ app_dir }}/uploads"
+
+    - name: Write the application environment file
       ansible.builtin.copy:
         dest: "{{ app_dir }}/dvmp.env"
-        content: "SPRING_PROFILES_ACTIVE=prod\nPORT={{ app_port }}\n"
+        content: |
+          SPRING_PROFILES_ACTIVE={{ app_env }}
+          SERVER_PORT=8080
+          HOST_PORT={{ app_port }}
         owner: "{{ app_user }}"
         mode: "0640"
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "Node is ready: user={{ app_user }}, dir={{ app_dir }}, docker={{ 'present' if docker_check.rc == 0 else 'installed by this playbook' }}"
