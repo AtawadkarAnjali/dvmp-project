@@ -12,7 +12,7 @@ pipeline {
   }
 
   environment {
-    DOCKER_USER = 'your-dockerhub-username'
+    DOCKER_USER = 'anjali192005'
     IMAGE       = "${DOCKER_USER}/dvmp"
     TAG         = "${BUILD_NUMBER}"
     HOST_PORT   = '8081'
