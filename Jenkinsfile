@@ -1,19 +1,18 @@
-// Full CI/CD pipeline: checkout -> build -> test -> package -> docker build/push -> deploy
-// Jenkins prerequisites: Maven tool "Maven3", JDK tool "JDK17", credentials "dockerhub-creds"
-// (username/password), plugins: Git, Pipeline, JUnit, Docker Pipeline. Chrome installed on the agent.
+// Tasks 8-12: CI/CD pipeline as code (Windows agent)
+// Commit -> build -> test -> package -> Docker image -> push to Docker Hub -> run container -> health check
+// Jenkins prerequisites: tools "Maven3" and "JDK17", credentials "dockerhub-creds" (Docker Hub user + access token)
 pipeline {
   agent any
   tools { maven 'Maven3'; jdk 'JDK17' }
 
   parameters {
-    choice(name: 'ENV', choices: ['dev', 'test', 'prod'], description: 'Spring profile / target environment')
-    choice(name: 'DEPLOY_TARGET', choices: ['docker', 'tomcat', 'none'], description: 'Where to deploy')
-    booleanParam(name: 'RUN_UI_TESTS', defaultValue: true, description: 'Run Selenium tests')
-    string(name: 'TOMCAT_WEBAPPS', defaultValue: '/opt/tomcat/webapps', description: 'Tomcat webapps folder')
+    choice(name: 'ENV', choices: ['dev', 'test'], description: 'Target environment (Spring profile shown in the page footer)')
+    choice(name: 'DEPLOY_MODE', choices: ['docker', 'process', 'none'], description: 'docker = image + container, process = deploy.ps1 on port 9091, none = build only')
+    booleanParam(name: 'RUN_UI_TESTS', defaultValue: true, description: 'Run Selenium UI tests')
   }
 
   environment {
-    DOCKER_USER = 'YOURNAME'          // <-- change this
+    DOCKER_USER = 'your-dockerhub-username'
     IMAGE       = "${DOCKER_USER}/dvmp"
     TAG         = "${BUILD_NUMBER}"
     HOST_PORT   = '8081'
@@ -22,12 +21,22 @@ pipeline {
   triggers { pollSCM('H/5 * * * *') }
 
   stages {
-    stage('Checkout') { steps { checkout scm } }
+    stage('Checkout') {
+      steps {
+        deleteDir()
+        checkout scm
+      }
+    }
 
-    stage('Build') { steps { sh 'mvn -B clean compile' } }
+    stage('Build') {
+      steps {
+        bat 'if exist target\\NUL (rmdir /s /q target) else (if exist target del /f /q target)'
+        bat 'mvn -B compile'
+      }
+    }
 
     stage('Test') {
-      steps { sh "mvn -B test -DskipUi=${!params.RUN_UI_TESTS}" }
+      steps { bat "mvn -B test -DskipUi=${!params.RUN_UI_TESTS}" }
       post {
         always {
           junit 'target/surefire-reports/*.xml'
@@ -38,57 +47,70 @@ pipeline {
 
     stage('Package') {
       steps {
-        sh 'mvn -B package -DskipTests'
+        bat 'mvn -B package -DskipTests'
         archiveArtifacts artifacts: 'target/dvmp.jar', fingerprint: true
       }
     }
 
-    stage('Deploy to Tomcat') {
-      when { expression { params.DEPLOY_TARGET == 'tomcat' } }
+    // ---------- Option 1: run the jar as a process (Task 8) ----------
+    stage('Deploy (process)') {
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'process' } }
       steps {
-        sh 'mvn -B -Pwar clean package -DskipTests'
-        sh "cp target/dvmp.war ${params.TOMCAT_WEBAPPS}/dvmp.war"
-        echo "Deployed: http://localhost:8080/dvmp/  (env=${params.ENV})"
+        withEnv(['JENKINS_NODE_COOKIE=dontKillMe']) {
+          bat "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\deploy.ps1 -AppProfile ${params.ENV} -Port 9091"
+        }
       }
+    }
+
+    // ---------- Option 2: Docker image + container (Task 12) ----------
+    stage('Docker Check') {
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'docker' } }
+      steps { bat 'docker version' }
     }
 
     stage('Docker Build') {
-      when { expression { params.DEPLOY_TARGET == 'docker' } }
-      steps {
-        sh "docker build -t ${IMAGE}:${TAG} -t ${IMAGE}:latest ."
-      }
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'docker' } }
+      steps { bat "docker build -t ${IMAGE}:${TAG} -t ${IMAGE}:latest ." }
     }
 
     stage('Docker Push') {
-      when { expression { params.DEPLOY_TARGET == 'docker' } }
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'docker' } }
       steps {
-        withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'U', passwordVariable: 'P')]) {
-          sh 'echo $P | docker login -u $U --password-stdin'
-          sh "docker push ${IMAGE}:${TAG}"
-          sh "docker push ${IMAGE}:latest"
+        // private docker config folder so the login does not depend on the Windows credential helper
+        withEnv(["DOCKER_CONFIG=${env.WORKSPACE}\\.docker"]) {
+          withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DH_USER', passwordVariable: 'DH_PASS')]) {
+            bat 'echo %DH_PASS%| docker login -u %DH_USER% --password-stdin'
+          }
+          bat "docker push ${IMAGE}:${TAG}"
+          bat "docker push ${IMAGE}:latest"
+          bat 'docker logout'
         }
       }
     }
 
     stage('Docker Deploy') {
-      when { expression { params.DEPLOY_TARGET == 'docker' } }
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'docker' } }
       steps {
-        sh '''
-          docker rm -f dvmp || true
-          docker run -d --name dvmp -p ${HOST_PORT}:8080 \
-            -e SPRING_PROFILES_ACTIVE=${ENV} -v dvmp-data:/app/data -v dvmp-uploads:/app/uploads ${IMAGE}:${TAG}
-          for i in $(seq 1 20); do
-            curl -sf http://localhost:${HOST_PORT}/actuator/health && exit 0
-            sleep 3
-          done
-          echo "Health check failed"; exit 1
-        '''
+        bat returnStatus: true, script: 'docker rm -f dvmp'
+        bat "docker run -d --name dvmp -p ${HOST_PORT}:8080 -e SPRING_PROFILES_ACTIVE=${params.ENV} -v dvmp-data:/app/data -v dvmp-uploads:/app/uploads ${IMAGE}:${TAG}"
+      }
+    }
+
+    stage('Verify') {
+      when { expression { (params.DEPLOY_MODE ?: 'docker') == 'docker' } }
+      steps {
+        retry(10) {
+          sleep time: 8, unit: 'SECONDS'
+          bat "curl -sf http://localhost:${HOST_PORT}/actuator/health"
+        }
+        bat 'docker ps --filter name=dvmp'
       }
     }
   }
 
   post {
-    success { echo "Pipeline OK -> ${IMAGE}:${TAG}" }
-    failure { echo 'Pipeline FAILED - deployment was skipped' }
+    success { echo "Pipeline OK. Image: ${IMAGE}:${TAG}  Portal: http://localhost:${HOST_PORT} (docker) or http://localhost:9091 (process)" }
+    failure { echo 'Pipeline FAILED - deployment was skipped or incomplete' }
+    always  { bat returnStatus: true, script: 'docker image prune -f' }
   }
 }
